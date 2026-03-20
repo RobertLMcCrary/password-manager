@@ -10,9 +10,10 @@ celes = "2.6.0"
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
 email_address = { version = "0.2.9", features = ["serde"] }
+futures-lite = "2.6.1"
 human_name = { version = "2.0.4", features = ["serde", "serde_json"] }
-iroh = "0.95.1"
-iroh-blobs = "0.97.0"
+iroh-docs = "0.97.0"
+iroh-gossip = "0.97.0"
 jiff = { version = "0.2.15", features = ["serde"] }
 phonenumber = "0.3.7"
 ratatui = { version = "0.30.0", features = ["all-widgets", "macros"] }
@@ -21,3 +22,7 @@ tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread", "sync"] }
 toml = { version = "0.9.8", features = ["serde"] }
 url = { version = "2.5.7", features = ["serde"] }
 walkdir = "2.5.0"
+crypto-common = { version = "0.2.1"}
+iroh = "0.97.0"
+iroh-blobs = "0.99.0"
+
