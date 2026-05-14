@@ -1,7 +1,12 @@
 use std::{path::PathBuf, str::FromStr as _};
 
 use clap::{Parser, Subcommand};
-use password::{AccountName, Item, PijulStore, ShareTicket, StoreBackend, VersionedEntry, models::{AccountStatus, OnlineAccount, SocialSecurity}, p2p::{IrohSyncHandle, decode_store, encode_store}};
+use password::{
+	AccountName, AgeScrypt, BranchPath, BranchSegment, Item, PersonalBranch, PijulStore, ShareTicket,
+	StoreBackend, StoreChange, VersionedEntry,
+	models::{AccountStatus, OnlineAccount, SocialSecurity},
+	p2p::{IrohSyncHandle, decode_store, encode_store},
+};
 
 /// A type-safe, Pijul-versioned, Iroh P2P credential store.
 #[derive(Parser)]
@@ -14,6 +19,11 @@ struct Cli {
 	/// The branch (party) to operate on.
 	#[arg(long, short = 'b', global = true, default_value = "main")]
 	branch: String,
+
+	/// Store passphrase. Defaults to $PWD_STORE_PASSPHRASE or an interactive
+	/// prompt.
+	#[arg(long, global = true, env = "PWD_STORE_PASSPHRASE")]
+	passphrase: Option<String>,
 
 	#[command(subcommand)]
 	command: Cmd,
@@ -127,6 +137,18 @@ enum Cmd {
 		/// Ticket string printed by `pwd share`.
 		ticket: String,
 	},
+
+	/// Re-encrypt this branch with a new passphrase.
+	Rekey {
+		/// New store passphrase. Defaults to $PWD_STORE_NEW_PASSPHRASE or an
+		/// interactive prompt.
+		#[arg(long, env = "PWD_STORE_NEW_PASSPHRASE")]
+		new_passphrase: Option<String>,
+
+		/// Record message for history.
+		#[arg(long, short = 'm', default_value = "rekey store")]
+		message: String,
+	},
 }
 
 // ── entry point
@@ -139,24 +161,25 @@ async fn main() -> anyhow::Result<()> {
 		.store_dir
 		.unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".pwd"));
 
-	let store = PijulStore::open(&store_dir)?;
-	let branch = &cli.branch;
+	let locked_store = PijulStore::open(&store_dir)?;
+	let branch = personal_branch(&cli.branch)?;
 
 	match cli.command {
 		Cmd::Init => {
-			store.init(branch)?;
+			locked_store.init(&branch)?;
 			println!("Initialized branch '{branch}' in {}", store_dir.display());
 		}
 
 		Cmd::Add { name, r#type, password, username, email, website, message } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
 			let item = match r#type.as_str() {
 				"ssn" => Item::SocialSecurity(SocialSecurity {
-					account_number:   name.clone().parse().unwrap_or_else(|_| unimplemented!()),
-					legal_name:       None,
-					issuance_date:    None,
+					account_number: name.clone().parse().unwrap_or_else(|_| unimplemented!()),
+					legal_name: None,
+					issuance_date: None,
 					country_of_issue: None,
-					notes:            None,
+					notes: None,
 				}),
 				_ => {
 					let host_website = website.as_deref().map(|u| u.parse::<url::Url>()).transpose()?;
@@ -181,13 +204,14 @@ async fn main() -> anyhow::Result<()> {
 				}
 			};
 
-			store.insert(branch, account_name.clone(), item, &message)?;
+			store.insert(&branch, account_name.clone(), item, StoreChange::Custom(message))?;
 			println!("Added '{name}' to branch '{branch}'");
 		}
 
 		Cmd::Get { name, field } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
-			match store.get(branch, &account_name)? {
+			match store.get(&branch, &account_name)? {
 				None => eprintln!("No entry '{name}' on branch '{branch}'"),
 				Some(item) => {
 					if let Some(f) = field {
@@ -200,8 +224,9 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::Remove { name, message } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
-			let removed = store.remove(branch, &account_name, &message)?;
+			let removed = store.remove(&branch, &account_name, StoreChange::Custom(message))?;
 			if removed {
 				println!("Removed '{name}' from branch '{branch}'");
 			} else {
@@ -210,7 +235,8 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::List => {
-			let names = store.list(branch)?;
+			let store = unlock_store(locked_store, cli.passphrase)?;
+			let names = store.list(&branch)?;
 			if names.is_empty() {
 				println!("(empty store on branch '{branch}')");
 			} else {
@@ -221,11 +247,12 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::Log { entry } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let filter = match entry {
 				Some(ref n) => Some(AccountName::new(n)?),
 				None => None,
 			};
-			let entries = store.log_impl(branch, filter.as_ref())?;
+			let entries = store.log_impl(&branch, filter.as_ref())?;
 			if entries.is_empty() {
 				println!("(no history on branch '{branch}')");
 			}
@@ -236,28 +263,31 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::Show { name, at } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
 			use pijul_at_core::Base32;
 			let hash = pijul_at_core::Hash::from_base32(at.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {at}"))?;
 
-			match store.entry(branch, account_name).snapshot_at(&hash)? {
+			match store.entry(&branch, account_name).snapshot_at(&hash)? {
 				Some(item) => println!("{}", toml::to_string_pretty(&item)?),
 				None => eprintln!("Entry '{name}' not found at patch {at}"),
 			}
 		}
 
 		Cmd::Revert { name, to } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
 			use pijul_at_core::Base32;
 			let hash = pijul_at_core::Hash::from_base32(to.as_bytes())
 				.ok_or_else(|| anyhow::anyhow!("invalid hash: {to}"))?;
 
-			store.entry(branch, account_name).revert_to(&hash)?;
+			store.entry(&branch, account_name).revert_to(&hash)?;
 			println!("Reverted '{name}' to {to} on branch '{branch}'");
 		}
 
 		Cmd::Diff { name, from, to } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let account_name = AccountName::new(&name)?;
 			use pijul_at_core::Base32;
 			let from_hash = pijul_at_core::Hash::from_base32(from.as_bytes())
@@ -270,7 +300,7 @@ async fn main() -> anyhow::Result<()> {
 				})
 				.transpose()?;
 
-			let diff = store.entry(branch, account_name).diff(&from_hash, to_hash.as_ref())?;
+			let diff = store.entry(&branch, account_name).diff(&from_hash, to_hash.as_ref())?;
 
 			println!("diff for {}", diff.label);
 			for line in diff.lines {
@@ -284,7 +314,8 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::Share => {
-			let loaded = store.load(branch)?;
+			let store = unlock_store(locked_store, cli.passphrase)?;
+			let loaded = store.load(&branch)?;
 			let payload = encode_store(&loaded)?;
 
 			let handle = IrohSyncHandle::new();
@@ -297,22 +328,49 @@ async fn main() -> anyhow::Result<()> {
 		}
 
 		Cmd::Receive { ticket } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
 			let share_ticket = ShareTicket::from_str(&ticket)?;
 			let handle = IrohSyncHandle::new();
 			let payload = handle.receive(&share_ticket).await?;
 			handle.shutdown().await?;
 
 			let received = decode_store(payload)?;
-			let mut current = store.load(branch)?;
+			let mut current = store.load(&branch)?;
 			for (name, item) in received.items {
 				current.items.insert(name, item);
 			}
-			store.save(branch, &current)?;
+			store.save(&branch, &current)?;
 			println!("Store updated on branch '{branch}' — {} entries now.", current.items.len());
+		}
+
+		Cmd::Rekey { new_passphrase, message } => {
+			let store = unlock_store(locked_store, cli.passphrase)?;
+			let new_passphrase = read_passphrase(new_passphrase, "New store passphrase")?;
+			let _store =
+				store.rekey_with(&branch, AgeScrypt::new(new_passphrase)?, StoreChange::Custom(message))?;
+			println!("Rekeyed branch '{branch}' in {}", store_dir.display());
 		}
 	}
 
 	Ok(())
+}
+
+fn unlock_store(
+	store: PijulStore,
+	passphrase: Option<String>,
+) -> anyhow::Result<password::versioning::PijulStore<password::Unlocked<AgeScrypt>>> {
+	Ok(store.unlock_with(AgeScrypt::new(read_passphrase(passphrase, "Store passphrase")?)?))
+}
+
+fn read_passphrase(passphrase: Option<String>, prompt: &str) -> anyhow::Result<String> {
+	match passphrase {
+		Some(passphrase) => Ok(passphrase),
+		None => Ok(rpassword::prompt_password(format!("{prompt}: "))?),
+	}
+}
+
+fn personal_branch(raw: &str) -> anyhow::Result<BranchPath<PersonalBranch>> {
+	Ok(BranchPath::personal(BranchSegment::new(raw)?))
 }
 
 fn extract_field(item: &Item, field: &str) -> Option<String> {
