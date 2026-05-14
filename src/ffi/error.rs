@@ -33,6 +33,10 @@ impl From<PwdError> for FfiError {
 			PwdError::EntryNotFound { name } => Self::EntryNotFound { name: name.to_string() },
 			PwdError::EntryAlreadyExists { name } => Self::EntryAlreadyExists { name: name.to_string() },
 			PwdError::InvalidAccountName(msg) => Self::InvalidAccountName { msg },
+			PwdError::InvalidBranchName(msg) => {
+				Self::Other { msg: format!("invalid branch name: {msg}") }
+			}
+			PwdError::AccessDenied(msg) => Self::Other { msg: format!("access denied: {msg}") },
 			PwdError::InvalidTicket(msg) => Self::InvalidTicket { msg },
 			PwdError::NothingToRecord => Self::NothingToRecord,
 			PwdError::PatchNotFound { hash } => Self::PatchNotFound { hash },
