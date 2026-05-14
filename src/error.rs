@@ -14,6 +14,14 @@ pub enum Error {
 	#[error("invalid account name: {0}")]
 	InvalidAccountName(String),
 
+	/// The supplied branch name is invalid.
+	#[error("invalid branch name: {0}")]
+	InvalidBranchName(String),
+
+	/// The caller does not have the requested access.
+	#[error("access denied: {0}")]
+	AccessDenied(String),
+
 	/// Attempted to record a patch but the working copy had no changes.
 	#[error("nothing to record")]
 	NothingToRecord,
@@ -45,6 +53,18 @@ pub enum Error {
 	/// The sync operation did not complete within the allotted time.
 	#[error("sync timed out after {secs}s")]
 	SyncTimeout { secs: u64 },
+
+	/// At-rest encryption failed.
+	#[error("encryption: {0}")]
+	Encryption(String),
+
+	/// At-rest decryption failed.
+	#[error("decryption: {0}")]
+	Decryption(String),
+
+	/// A cached unlock/session token is malformed or has an invalid signature.
+	#[error("session: {0}")]
+	Session(String),
 
 	/// The remote peer closed the connection unexpectedly.
 	#[error("peer disconnected")]
