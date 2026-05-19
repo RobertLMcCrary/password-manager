@@ -7,6 +7,9 @@ struct FieldRow: View {
     let label: String
     let value: String
 
+    @State private var copied = false
+    @State private var hovered = false
+
     var body: some View {
         HStack {
             Text(label)
@@ -14,11 +17,31 @@ struct FieldRow: View {
                 .font(.caption)
                 .frame(width: 100)
             Text(value)
+                .onHover { hovered = $0 }
+                .foregroundColor(hovered ? .blue : .gray)
+                .onTapGesture {
+                    copyToClipboard(value)
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1.5) {
+                        copied = false
+                    }
+                }
+                .onChange(of: value) {
+                    copied = false
+                }
+
+            if hovered {
+                Text("Click to Copy")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            if copied {
+                Text("Copied!")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
             Spacer()
-            /*
-            Button("Copy") { copyToClipboard(value) }
-                .foregroundColor(.gray)
-            */
+
         }
         .padding(.vertical, 6)
     }
@@ -28,6 +51,7 @@ struct PasswordRow: View {
     let password: String
     @Binding var showPassword: Bool
     @State private var copied = false
+    @State private var hovered = false
 
     var body: some View {
         HStack {
@@ -36,7 +60,11 @@ struct PasswordRow: View {
                 .font(.caption)
                 .frame(width: 100)
             Text(showPassword ? password : String(repeating: "•", count: 16))
-                .onHover { hovering in showPassword = hovering }
+                .onHover {
+                    hovering in
+                    showPassword = hovering
+                    hovered = true
+                }
                 .onTapGesture {
                     copyToClipboard(password)
                     copied = true
@@ -47,6 +75,11 @@ struct PasswordRow: View {
                 .onChange(of: password) {
                     copied = false
                 }
+            if hovered {
+                Text("Click to Copy")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
             if copied {
                 Text("Copied!")
                     .font(.caption)
