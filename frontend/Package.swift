@@ -7,8 +7,8 @@ import PackageDescription
 // that any build tool (swift build, swift run, swift-bundler) can find the dylib
 // without needing extra -Xlinker flags on the command line.
 let repoRoot = URL(fileURLWithPath: #file)
-    .deletingLastPathComponent()   // frontend/
-    .deletingLastPathComponent()   // repo root
+    .deletingLastPathComponent()  // frontend/
+    .deletingLastPathComponent()  // repo root
     .standardized
 let rustDebug = repoRoot.appendingPathComponent("target/debug").path
 
@@ -19,7 +19,7 @@ let package = Package(
         .package(
             url: "https://github.com/moreSwift/swift-cross-ui",
             .upToNextMinor(from: "0.2.1")
-        ),
+        )
     ],
     targets: [
         // C module wrapping the UniFFI-generated header.
@@ -28,7 +28,7 @@ let package = Package(
             path: "Sources/passwordFFI",
             publicHeadersPath: "include",
             linkerSettings: [
-                .linkedLibrary("password"),
+                .linkedLibrary("password")
             ]
         ),
 
@@ -46,7 +46,7 @@ let package = Package(
                     "-Xlinker", "-L\(rustDebug)",
                     "-Xlinker", "-rpath",
                     "-Xlinker", rustDebug,
-                ]),
+                ])
             ]
         ),
     ]

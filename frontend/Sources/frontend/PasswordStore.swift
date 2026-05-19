@@ -4,6 +4,7 @@ import SwiftCrossUI
 @ObservableObject
 final class PasswordStoreViewModel {
     var entries: [String] = []
+    var subtitles: [String: String] = [:]
     var selectedEntry: String? = nil
     var selectedItem: FfiItem? = nil
     var errorMessage: String? = nil
@@ -22,6 +23,18 @@ final class PasswordStoreViewModel {
     func reload() {
         do {
             entries = try store.listEntries()
+            var subs: [String: String] = [:]
+            for name in entries {
+                if let item = try? store.getEntry(name: name) {
+                    switch item {
+                    case .onlineAccount(let a):
+                        subs[name] = a.username ?? a.email ?? a.hostWebsite ?? ""
+                    case .socialSecurity(let s):
+                        subs[name] = s.legalName ?? "Social Security"
+                    }
+                }
+            }
+            subtitles = subs
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -50,6 +63,7 @@ final class PasswordStoreViewModel {
         do {
             try store.updateEntry(name: name, item: item, message: message)
             if selectedEntry == name { select(name) }
+            reload()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -79,6 +93,14 @@ final class PasswordStoreViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func diff(name: String, fromHash: String) -> DiffResult? {
+        try? store.diffEntry(name: name, fromHash: fromHash, toHash: nil)
+    }
+
+    func headHash(for name: String) -> String? {
+        try? store.headHash(name: name)
     }
 
     // MARK: P2P

@@ -46,10 +46,10 @@ canonical-path       = "2.0"
 rand                 = "0.10"
 
 # P2P
-iroh        = "0.97.0"
-iroh-blobs  = "0.99.0"
-iroh-docs   = "0.97.0"
-iroh-gossip = "0.97.0"
+iroh        = { version = "1.0.0-rc.0" }
+iroh-blobs  = "0.101.0"
+iroh-docs   = "0.99.0"
+iroh-gossip = "0.99.0"
 futures-lite = "2.6"
 
 # CLI
