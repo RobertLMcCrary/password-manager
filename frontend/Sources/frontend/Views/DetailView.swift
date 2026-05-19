@@ -76,7 +76,7 @@ struct OnlineAccountDetail: View {
                 if let v = account.username { FieldRow(label: "Username", value: v) }
                 if let v = account.email { FieldRow(label: "Email", value: v) }
                 if let v = account.phone { FieldRow(label: "Phone", value: v) }
-                if let v = account.hostWebsite { FieldRow(label: "Website", value: v) }
+                if let v = account.hostWebsite { WebsiteRow(url: v) }
                 if let pages = account.loginPages, !pages.isEmpty {
                     FieldRow(label: "Login Pages", value: pages.joined(separator: "\n"))
                 }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftCrossUI
 
@@ -86,6 +87,30 @@ struct PasswordRow: View {
                     .foregroundColor(.green)
             }
 
+            Spacer()
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+struct WebsiteRow: View {
+    let url: String
+    @State private var hovered = false
+
+    var body: some View {
+        HStack {
+            Text("Website")
+                .foregroundColor(.gray)
+                .font(.caption)
+                .frame(width: 100)
+            Text(url)
+                .foregroundColor(hovered ? .blue : .gray)
+                .onHover { hovered = $0 }
+                .onTapGesture {
+                    if let u = URL(string: url) {
+                        NSWorkspace.shared.open(u)
+                    }
+                }
             Spacer()
         }
         .padding(.vertical, 6)

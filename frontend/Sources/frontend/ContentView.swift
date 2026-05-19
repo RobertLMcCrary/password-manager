@@ -1,6 +1,18 @@
 import SwiftCrossUI
 
+/*
+TODO
+- [x] click to copy on all fields
+- [x] hover -> "click to copy" for all fields
+- [ ] open website in browser
+- [ ] more sorting
+*/
+
 // MARK: - Root
+
+enum SortOrder {
+    case nameAscending, nameDescending
+}
 
 struct ContentView: View {
     @Environment(PasswordStoreViewModel.self) var vm
@@ -8,10 +20,14 @@ struct ContentView: View {
     @State var showShareSheet = false
     @State var receiveTicket = ""
     @State var searchText = ""
+    @State var sortOrder: SortOrder = .nameAscending
 
     var filteredEntries: [String] {
-        let sorted = vm.entries.sorted()
-        guard !searchText.isEmpty else { return sorted }
+        let sorted =
+            sortOrder == .nameAscending
+            ? vm.entries.sorted()
+            : vm.entries.sorted().reversed()
+        guard !searchText.isEmpty else { return Array(sorted) }
         return sorted.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
 
@@ -31,13 +47,20 @@ struct ContentView: View {
                             Spacer()
                         }
                     } else {
-                        List(filteredEntries, id: \.self, selection: vm.$selectedEntry) { name in
+                        List(filteredEntries, id: \.self, selection: vm.$selectedEntry) {
+                            name in
                             EntryRow(name: name, subtitle: vm.subtitles[name] ?? "")
                         }
                         .onChange(of: vm.selectedEntry) {
                             if let name = vm.selectedEntry { vm.select(name) }
                         }
                     }
+
+                    Button(sortOrder == .nameAscending ? "A-Z" : "Z-A") {
+                        sortOrder =
+                            sortOrder == .nameAscending ? .nameDescending : .nameAscending
+                    }
+                    .foregroundColor(.gray)
 
                     Divider()
 
